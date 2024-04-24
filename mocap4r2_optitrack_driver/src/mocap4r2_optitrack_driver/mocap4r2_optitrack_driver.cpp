@@ -132,11 +132,15 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
 
   std::map<int, std::vector<mocap4r2_msgs::msg::Marker>> marker2rb;
 
+  if (client->GetDataDescriptionList(&data_descriptions) != ErrorCode_OK || !data_descriptions) {
+    RCLCPP_DEBUG(get_logger(), "[Client] Unable to retrieve Data Descriptions.\n");
+  }
+
   // Markers
   if (mocap4r2_markers_pub_->get_subscription_count() > 0) {
     mocap4r2_msgs::msg::Markers msg;
     msg.header.stamp = now() - frame_delay;
-    msg.header.frame_id = "map";
+    msg.header.frame_id = parent_frame_;
     msg.frame_number = frame_number_;
 
     for (int i = 0; i < data->nLabeledMarkers; i++) {
@@ -161,28 +165,53 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
     mocap4r2_markers_pub_->publish(msg);
   }
 
-  if (mocap4r2_rigid_body_pub_->get_subscription_count() > 0) {
-    mocap4r2_msgs::msg::RigidBodies msg_rb;
-    msg_rb.header.stamp = now() - frame_delay;
-    msg_rb.header.frame_id = "map";
-    msg_rb.frame_number = frame_number_;
+  
+  mocap4r2_msgs::msg::RigidBodies msg_rb;
+  msg_rb.header.stamp = now() - frame_delay;
+  msg_rb.header.frame_id = parent_frame_;
+  msg_rb.frame_number = frame_number_;
 
-    for (int i = 0; i < data->nRigidBodies; i++) {
-      mocap4r2_msgs::msg::RigidBody rb;
+  for (int i = 0; i < data->nRigidBodies; i++) {
+    std::string rb_name;
+    std::string rb_id = std::to_string(data->RigidBodies[i].ID);
+    auto it = rigid_body_id_name_map_.find(rb_id);
+    if (it == rigid_body_id_name_map_.end()) {
+        std::cout << "Key \"" << rb_id << "\" does not exist in the map." << std::endl;
+        // Need to lookup in the data description and add the entry into the map then return
+    }
+    rb_name = rigid_body_id_name_map_[rb_id];
 
-      rb.rigid_body_name = std::to_string(data->RigidBodies[i].ID);
-      rb.pose.position.x = data->RigidBodies[i].x;
-      rb.pose.position.y = data->RigidBodies[i].y;
-      rb.pose.position.z = data->RigidBodies[i].z;
-      rb.pose.orientation.x = data->RigidBodies[i].qx;
-      rb.pose.orientation.y = data->RigidBodies[i].qy;
-      rb.pose.orientation.z = data->RigidBodies[i].qz;
-      rb.pose.orientation.w = data->RigidBodies[i].qw;
-      rb.markers = marker2rb[data->RigidBodies[i].ID];
-
-      msg_rb.rigidbodies.push_back(rb);
+    if(enable_transform_broadcast_) {
+      geometry_msgs::msg::TransformStamped t;
+      // Read message content and assign it to corresponding tf variables
+      t.header.stamp = now() - frame_delay;
+      t.header.frame_id = parent_frame_;
+      t.child_frame_id = rb_name;
+      t.transform.translation.x = data->RigidBodies[i].x;
+      t.transform.translation.y = data->RigidBodies[i].y;
+      t.transform.translation.z = data->RigidBodies[i].z;
+      t.transform.rotation.x = data->RigidBodies[i].qx;
+      t.transform.rotation.y = data->RigidBodies[i].qy;
+      t.transform.rotation.z = data->RigidBodies[i].qz;
+      t.transform.rotation.w = data->RigidBodies[i].qw;
+      // Send the transformation
+      tf_broadcaster_->sendTransform(t);
     }
 
+    mocap4r2_msgs::msg::RigidBody rb;
+    rb.rigid_body_name = rb_name;
+    rb.pose.position.x = data->RigidBodies[i].x;
+    rb.pose.position.y = data->RigidBodies[i].y;
+    rb.pose.position.z = data->RigidBodies[i].z;
+    rb.pose.orientation.x = data->RigidBodies[i].qx;
+    rb.pose.orientation.y = data->RigidBodies[i].qy;
+    rb.pose.orientation.z = data->RigidBodies[i].qz;
+    rb.pose.orientation.w = data->RigidBodies[i].qw;
+    rb.markers = marker2rb[data->RigidBodies[i].ID];
+    msg_rb.rigidbodies.push_back(rb);
+  }
+
+  if (mocap4r2_rigid_body_pub_->get_subscription_count() > 0) {
     mocap4r2_rigid_body_pub_->publish(msg_rb);
   }
 }
@@ -351,6 +380,10 @@ OptitrackDriverNode::initParameters()
   get_parameter<std::string>("multicast_address", multicast_address_);
   get_parameter<uint16_t>("server_command_port", server_command_port_);
   get_parameter<uint16_t>("server_data_port", server_data_port_);
+
+  get_parameter<std::string>("parent_frame", parent_frame_);
+  get_parameter<bool>("enable_transform_broadcast", enable_transform_broadcast_);
+  get_parameter<bool>("enable_individual_pose_publisher", enable_individual_pose_publisher_);
 }
 
 }  // namespace mocap4r2_optitrack_driver

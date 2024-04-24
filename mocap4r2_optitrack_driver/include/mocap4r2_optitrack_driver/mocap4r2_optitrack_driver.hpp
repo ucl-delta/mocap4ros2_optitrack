@@ -102,6 +102,12 @@ protected:
     mocap4r2_markers_pub_;
   rclcpp_lifecycle::LifecyclePublisher<mocap4r2_msgs::msg::RigidBodies>::SharedPtr
     mocap4r2_rigid_body_pub_;
+  
+  // Initialize the transform broadcaster
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+
+  std::map<std::string, std::string> rigid_body_id_name_map_;
+  std::map<std::string, rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::PoseStamped>> rigid_body_publisher_map_;
 
   std::string connection_type_;
   std::string server_address_;
@@ -109,6 +115,11 @@ protected:
   std::string multicast_address_;
   uint16_t server_command_port_;
   uint16_t server_data_port_;
+
+  bool enable_transform_broadcast_;
+  bool enable_individual_pose_publisher_;
+
+  std::string parent_frame_;
 
   uint32_t frame_number_{0};
 };

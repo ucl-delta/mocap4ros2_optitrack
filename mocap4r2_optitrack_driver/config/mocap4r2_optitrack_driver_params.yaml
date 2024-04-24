@@ -15,3 +15,6 @@ mocap4r2_optitrack_driver_node:
     qos_history_policy: "keep_all"         # keep_all / keep_last
     qos_reliability_policy: "best_effort"  # best_effort / reliable
     qos_depth: 10                         # 10 / 100 / 1000
+    parent_frame: "map"
+    enable_transform_broadcast: true
+    enable_individual_pose_publisher: true
