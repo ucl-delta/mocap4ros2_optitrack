@@ -244,8 +244,9 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
           RCLCPP_INFO(this->get_logger(), "Key %d Found, using name: %s", rb_id, rb_name.c_str());
         }
         rigid_body_id_name_map_[rb_id] = rb_name;
+    } else {
+      rb_name = it->second;
     }
-    rb_name = rigid_body_id_name_map_[rb_id];
 
     if(enable_transform_broadcast_) {
       geometry_msgs::msg::TransformStamped t;
@@ -275,6 +276,34 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
     rb.pose.orientation.w = data->RigidBodies[i].qw;
     rb.markers = marker2rb[data->RigidBodies[i].ID];
     msg_rb.rigidbodies.push_back(rb);
+
+
+    if(enable_individual_pose_publisher_) {
+      rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr publisher; 
+      auto it = rigid_body_publisher_map_.find(rb_name);
+      if (it == rigid_body_publisher_map_.end()) {
+          // Not found create publisher for this rigid_body
+          publisher = create_publisher<geometry_msgs::msg::PoseStamped>(
+            "rigid_bodies/" + rb_name, rclcpp::QoS(1000) 
+          );
+          rigid_body_publisher_map_[rb_name] = publisher;
+          
+      } else {
+        publisher = it->second;
+      }
+      
+      geometry_msgs::msg::PoseStamped t;
+      t.header.stamp = now() - frame_delay;
+      t.header.frame_id = rb_name;
+      t.pose.position.x = data->RigidBodies[i].x;
+      t.pose.position.y = data->RigidBodies[i].y;
+      t.pose.position.z = data->RigidBodies[i].z;
+      t.pose.orientation.x = data->RigidBodies[i].qx;
+      t.pose.orientation.y = data->RigidBodies[i].qy;
+      t.pose.orientation.z = data->RigidBodies[i].qz;
+      t.pose.orientation.w = data->RigidBodies[i].qw;
+      publisher->publish(t);
+    }
   }
 
   if (mocap4r2_rigid_body_pub_->get_subscription_count() > 0) {
