@@ -91,6 +91,8 @@ protected:
   NatNetClient * client;
 
   std::chrono::nanoseconds get_optitrack_system_latency(sFrameOfMocapData * data);
+  std::string get_rigidbody_name_from_id(int32_t id);
+  bool update_data_description();
 
   sNatNetClientConnectParams client_params;
   sServerDescription server_description;
@@ -106,7 +108,7 @@ protected:
   // Initialize the transform broadcaster
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
-  std::map<std::string, std::string> rigid_body_id_name_map_;
+  std::map<int32_t, std::string> rigid_body_id_name_map_;
   std::map<std::string, rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::PoseStamped>> rigid_body_publisher_map_;
 
   std::string connection_type_;

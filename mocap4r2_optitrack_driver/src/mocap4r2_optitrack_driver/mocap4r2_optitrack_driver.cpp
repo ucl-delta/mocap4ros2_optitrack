@@ -120,6 +120,55 @@ std::chrono::nanoseconds OptitrackDriverNode::get_optitrack_system_latency(sFram
   }
 }
 
+/**
+ * \brief Get the latest active assets list from Motive.
+ * \return 
+ */
+bool 
+OptitrackDriverNode::update_data_description()
+{
+    // release memory allocated by previous in previous GetDataDescriptionList()
+    if (data_descriptions)
+    {
+        NatNet_FreeDescriptions(data_descriptions);
+    }
+
+    // Retrieve Data Descriptions from Motive
+    // printf("\n\n[SampleClient] Requesting Data Descriptions...\n");
+    int iResult = client->GetDataDescriptionList(&data_descriptions);
+    if (iResult != ErrorCode_OK || data_descriptions == NULL)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+std::string 
+OptitrackDriverNode::get_rigidbody_name_from_id(int32_t id)
+{
+  sDataDescriptions* pDataDefs = data_descriptions;
+  // printf("[SampleClient] Received %d Data Descriptions:\n", pDataDefs->nDataDescriptions);
+  for (int i = 0; i < pDataDefs->nDataDescriptions; i++)
+  {
+      // printf("Data Description # %d (type=%d)\n", i, pDataDefs->arrDataDescriptions[i].type);
+      if (pDataDefs->arrDataDescriptions[i].type == Descriptor_RigidBody)
+      {
+          // RigidBody
+          sRigidBodyDescription* pRB = pDataDefs->arrDataDescriptions[i].Data.RigidBodyDescription;
+          // printf("RigidBody Name : %s\n", pRB->szName);
+          // printf("RigidBody ID : %d\n", pRB->ID);
+          // printf("RigidBody Parent ID : %d\n", pRB->parentID);
+          // printf("Parent Offset : %3.2f,%3.2f,%3.2f\n", pRB->offsetx, pRB->offsety, pRB->offsetz);
+          if(pRB->ID == id) {
+            // Return matching name
+            return pRB->szName;
+          }
+      }
+  }
+  return "";
+}
+
 void
 OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
 {
@@ -130,12 +179,18 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
   frame_number_++;
   rclcpp::Duration frame_delay = rclcpp::Duration(get_optitrack_system_latency(data));
 
-  std::map<int, std::vector<mocap4r2_msgs::msg::Marker>> marker2rb;
-
-  if (client->GetDataDescriptionList(&data_descriptions) != ErrorCode_OK || !data_descriptions) {
-    RCLCPP_DEBUG(get_logger(), "[Client] Unable to retrieve Data Descriptions.\n");
+  // Check if list of models has changed
+  bool bTrackedModelsChanged = ((data->params & 0x02) != 0);
+  if (bTrackedModelsChanged)
+  {
+      printf("\n\nMotive asset list changed.  Requesting new data descriptions.\n");
+      if (update_data_description()) {
+        // Probably put this call in a separate timer class 
+        RCLCPP_DEBUG(get_logger(), "[Client] Unable to retrieve Data Descriptions.\n");
+      }
   }
-
+  
+  std::map<int, std::vector<mocap4r2_msgs::msg::Marker>> marker2rb;
   // Markers
   if (mocap4r2_markers_pub_->get_subscription_count() > 0) {
     mocap4r2_msgs::msg::Markers msg;
@@ -173,11 +228,18 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
 
   for (int i = 0; i < data->nRigidBodies; i++) {
     std::string rb_name;
-    std::string rb_id = std::to_string(data->RigidBodies[i].ID);
+    int32_t rb_id = data->RigidBodies[i].ID;
     auto it = rigid_body_id_name_map_.find(rb_id);
     if (it == rigid_body_id_name_map_.end()) {
-        std::cout << "Key \"" << rb_id << "\" does not exist in the map." << std::endl;
         // Need to lookup in the data description and add the entry into the map then return
+        rb_name = get_rigidbody_name_from_id(data->RigidBodies[i].ID);
+        if(rb_name.length() == 0) {
+          rb_name = std::to_string(rb_id);
+          RCLCPP_INFO(this->get_logger(), "Key Not Found %d, using id as name instead: %s", rb_id, rb_name.c_str());
+        } else {
+          RCLCPP_INFO(this->get_logger(), "Key %d Found, using name: %s", rb_id, rb_name.c_str());
+        }
+        rigid_body_id_name_map_[rb_id] = rb_name;
     }
     rb_name = rigid_body_id_name_map_[rb_id];
 
@@ -265,6 +327,13 @@ CallbackReturnT
 OptitrackDriverNode::on_cleanup(const rclcpp_lifecycle::State & state)
 {
   (void)state;
+
+  // release memory allocated by previous in previous GetDataDescriptionList()
+  if (data_descriptions)
+  {
+      NatNet_FreeDescriptions(data_descriptions);
+  }
+
   RCLCPP_INFO(get_logger(), "Cleaned up!\n");
 
   if (disconnect_optitrack()) {
