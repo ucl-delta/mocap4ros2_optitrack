@@ -93,6 +93,7 @@ protected:
   std::chrono::nanoseconds get_optitrack_system_latency(sFrameOfMocapData * data);
   std::string get_rigidbody_name_from_id(int32_t id);
   bool update_data_description();
+  void reset_rigid_body_map_cb(const std_msgs::msg::Empty::SharedPtr msg);
 
   sNatNetClientConnectParams client_params;
   sServerDescription server_description;
@@ -104,12 +105,15 @@ protected:
     mocap4r2_markers_pub_;
   rclcpp_lifecycle::LifecyclePublisher<mocap4r2_msgs::msg::RigidBodies>::SharedPtr
     mocap4r2_rigid_body_pub_;
-  
+
+  rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr
+    mocap4r2_reset_rigid_body_list_pub_;
+
   // Initialize the transform broadcaster
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
   std::map<int32_t, std::string> rigid_body_id_name_map_;
-  std::map<std::string, rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::PoseStamped>> rigid_body_publisher_map_;
+  std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::PoseStamped>> rigid_body_publisher_map_;
 
   std::string connection_type_;
   std::string server_address_;

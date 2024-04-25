@@ -44,6 +44,10 @@ OptitrackDriverNode::OptitrackDriverNode()
   declare_parameter<uint16_t>("server_command_port", 0);
   declare_parameter<uint16_t>("server_data_port", 0);
 
+  declare_parameter<std::string>("parent_frame", "base");
+  declare_parameter<bool>("enable_transform_broadcast", false);
+  declare_parameter<bool>("enable_individual_pose_publisher", false);
+
   client = new NatNetClient();
   client->SetFrameReceivedCallback(process_frame_callback, this);
 }
@@ -278,6 +282,17 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
   }
 }
 
+void 
+OptitrackDriverNode::reset_rigid_body_map_cb(const std_msgs::msg::Empty::SharedPtr msg)
+{
+  (void) msg;
+  rigid_body_id_name_map_.clear();
+  RCLCPP_INFO(this->get_logger(), "Internal Rigid Body Id Name Map Cleared");
+  rigid_body_publisher_map_.clear();
+  RCLCPP_INFO(this->get_logger(), "Internal Rigid Body Name Pose Publishing Map Cleared");
+}
+
+
 using CallbackReturnT =
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -293,6 +308,13 @@ OptitrackDriverNode::on_configure(const rclcpp_lifecycle::State & state)
     "markers", rclcpp::QoS(1000));
   mocap4r2_rigid_body_pub_ = create_publisher<mocap4r2_msgs::msg::RigidBodies>(
     "rigid_bodies", rclcpp::QoS(1000));
+  
+  if(enable_transform_broadcast_ || enable_individual_pose_publisher_)
+  {
+    mocap4r2_reset_rigid_body_list_pub_ = create_subscription<std_msgs::msg::Empty>(
+        "reset_rigid_bodies", rclcpp::QoS(10), 
+        std::bind(&OptitrackDriverNode::reset_rigid_body_map_cb, this, std::placeholders::_1));
+  }
 
   connect_optitrack();
 
