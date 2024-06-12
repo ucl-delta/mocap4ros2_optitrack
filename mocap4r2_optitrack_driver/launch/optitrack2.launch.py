@@ -23,10 +23,11 @@ from ament_index_python.packages import get_package_share_directory
 import launch
 
 from launch import LaunchDescription
-from launch.actions import EmitEvent
+from launch.actions import EmitEvent, DeclareLaunchArgument
 from launch.actions import SetEnvironmentVariable
 from launch_ros.actions import LifecycleNode
 from launch_ros.events.lifecycle import ChangeState
+from launch.conditions import LaunchConfigurationEquals
 
 import lifecycle_msgs.msg
 
@@ -42,6 +43,10 @@ def generate_launch_description():
     # print('')
     # print('params_file_path: ', params_file_path)
     # print('')
+
+    auto_activate_launch_arg = DeclareLaunchArgument("auto_activate", 
+                                                     description="Automatically activate node",
+                                                     default_value="true")
 
     driver_node = LifecycleNode(
         name='mocap4r2_optitrack_driver_node',
@@ -61,19 +66,21 @@ def generate_launch_description():
     )
 
     # Make the driver node take the 'activate' transition
-    # driver_activate_trans_event = EmitEvent(
-    #    event = ChangeState(
-    #        lifecycle_node_matcher = launch.events.matchers.matches_action(driver_node),
-    #        transition_id = lifecycle_msgs.msg.Transition.TRANSITION_ACTIVATE,
-    #     )
-    # )
+    driver_activate_trans_event = EmitEvent(
+       event = ChangeState(
+           lifecycle_node_matcher = launch.events.matchers.matches_action(driver_node),
+           transition_id = lifecycle_msgs.msg.Transition.TRANSITION_ACTIVATE,
+        ),
+        condition=LaunchConfigurationEquals("auto_activate", "true")
+    )
 
     # Create the launch description and populate
     ld = LaunchDescription()
-
+    
+    ld.add_action(auto_activate_launch_arg)
     ld.add_action(stdout_linebuf_envvar)
     ld.add_action(driver_node)
     ld.add_action(driver_configure_trans_event)
-    # ld.add_action(driver_activate_trans_event)
+    ld.add_action(driver_activate_trans_event)
 
     return ld

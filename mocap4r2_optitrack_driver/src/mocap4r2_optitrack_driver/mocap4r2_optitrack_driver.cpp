@@ -193,7 +193,7 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
         RCLCPP_DEBUG(get_logger(), "[Client] Unable to retrieve Data Descriptions.\n");
       }
   }
-  
+
   std::map<int, std::vector<mocap4r2_msgs::msg::Marker>> marker2rb;
   // Markers
   if (mocap4r2_markers_pub_->get_subscription_count() > 0) {
@@ -343,6 +343,12 @@ OptitrackDriverNode::on_configure(const rclcpp_lifecycle::State & state)
     mocap4r2_reset_rigid_body_list_pub_ = create_subscription<std_msgs::msg::Empty>(
         "reset_rigid_bodies", rclcpp::QoS(10), 
         std::bind(&OptitrackDriverNode::reset_rigid_body_map_cb, this, std::placeholders::_1));
+  }
+
+  if(enable_transform_broadcast_) {
+    // Initialize the transform broadcaster
+    tf_broadcaster_ =
+      std::make_unique<tf2_ros::TransformBroadcaster>(*this);
   }
 
   connect_optitrack();
