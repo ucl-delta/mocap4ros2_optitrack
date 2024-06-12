@@ -24,37 +24,27 @@ import launch
 
 from launch import LaunchDescription
 from launch.actions import EmitEvent, DeclareLaunchArgument
-from launch.actions import SetEnvironmentVariable
+from launch.actions import SetEnvironmentVariable, OpaqueFunction
 from launch_ros.actions import LifecycleNode
 from launch_ros.events.lifecycle import ChangeState
+from launch_ros.substitutions import FindPackageShare
 from launch.conditions import LaunchConfigurationEquals
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 import lifecycle_msgs.msg
 
+def get_node(context):
+    """ Returns the follow_path behavior node """
+    config_file = LaunchConfiguration('config_file').perform(context)
 
-def generate_launch_description():
-
-    params_file_path = os.path.join(get_package_share_directory(
-      'mocap4r2_optitrack_driver'), 'config', 'mocap4r2_optitrack_driver_params.yaml')
-
-    stdout_linebuf_envvar = SetEnvironmentVariable(
-        'RCUTILS_CONSOLE_STDOUT_LINE_BUFFERED', '1')
-
-    # print('')
-    # print('params_file_path: ', params_file_path)
-    # print('')
-
-    auto_activate_launch_arg = DeclareLaunchArgument("auto_activate", 
-                                                     description="Automatically activate node",
-                                                     default_value="true")
-
+    print(config_file)
     driver_node = LifecycleNode(
         name='mocap4r2_optitrack_driver_node',
-        namespace='',
+        namespace=LaunchConfiguration("namespace").perform(context),
         package='mocap4r2_optitrack_driver',
         executable='mocap4r2_optitrack_driver_main',
         output='screen',
-        parameters=[params_file_path],
+        parameters=[config_file],
     )
 
     # Make the driver node take the 'configure' transition
@@ -74,13 +64,39 @@ def generate_launch_description():
         condition=LaunchConfigurationEquals("auto_activate", "true")
     )
 
+    return [
+        driver_node,
+        driver_configure_trans_event,
+        driver_activate_trans_event
+    ]
+
+
+def generate_launch_description():
+
+    stdout_linebuf_envvar = SetEnvironmentVariable(
+        'RCUTILS_CONSOLE_STDOUT_LINE_BUFFERED', '1')
+
+
+    namespace_launch_arg = DeclareLaunchArgument("namespace")
+
+    default_mocap_params = os.path.join(
+            get_package_share_directory('mocap4r2_optitrack_driver'),
+            'config', 'mocap4r2_optitrack_driver_params.yaml'
+        )
+    print(default_mocap_params)
+    config_file_launch_arg = DeclareLaunchArgument('config_file', default_value=default_mocap_params)
+
+    auto_activate_launch_arg = DeclareLaunchArgument("auto_activate", 
+                                                     description="Automatically activate node",
+                                                     default_value="true")
+
     # Create the launch description and populate
     ld = LaunchDescription()
     
     ld.add_action(auto_activate_launch_arg)
+    ld.add_action(namespace_launch_arg)
+    ld.add_action(config_file_launch_arg)
     ld.add_action(stdout_linebuf_envvar)
-    ld.add_action(driver_node)
-    ld.add_action(driver_configure_trans_event)
-    ld.add_action(driver_activate_trans_event)
+    ld.add_action(OpaqueFunction(function=get_node))
 
     return ld
