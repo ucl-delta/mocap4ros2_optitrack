@@ -179,7 +179,9 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
   if (get_current_state().id() != lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE) {
     return;
   }
-
+  //Check if precision time is available
+  bool PTPAvailable = data->PrecisionTimestampSecs != 0;
+  rclcpp::Time PTPTime(data->PrecisionTimestampSecs,data->PrecisionTimestampFractionalSecs);
   frame_number_++;
   rclcpp::Duration frame_delay = rclcpp::Duration(get_optitrack_system_latency(data));
 
@@ -198,7 +200,12 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
   // Markers
   if (mocap4r2_markers_pub_->get_subscription_count() > 0) {
     mocap4r2_msgs::msg::Markers msg;
-    msg.header.stamp = now() - frame_delay;
+    if (PTPAvailable)
+    {
+      msg.header.stamp = PTPTime;
+    } else {
+      msg.header.stamp = now() - frame_delay;
+    }
     msg.header.frame_id = parent_frame_;
     msg.frame_number = frame_number_;
 
@@ -226,7 +233,12 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
 
   
   mocap4r2_msgs::msg::RigidBodies msg_rb;
-  msg_rb.header.stamp = now() - frame_delay;
+  if (PTPAvailable)
+    {
+      msg_rb.header.stamp = PTPTime;
+    } else {
+      msg_rb.header.stamp = now() - frame_delay;
+    }
   msg_rb.header.frame_id = parent_frame_;
   msg_rb.frame_number = frame_number_;
 
@@ -251,7 +263,12 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
     if(enable_transform_broadcast_) {
       geometry_msgs::msg::TransformStamped t;
       // Read message content and assign it to corresponding tf variables
-      t.header.stamp = now() - frame_delay;
+        if (PTPAvailable)
+      {
+        t.header.stamp = PTPTime;
+      } else {
+        t.header.stamp = now() - frame_delay;
+      }
       t.header.frame_id = parent_frame_;
       t.child_frame_id = rb_name;
       t.transform.translation.x = data->RigidBodies[i].x;
@@ -293,7 +310,12 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
       }
       
       geometry_msgs::msg::PoseStamped t;
-      t.header.stamp = now() - frame_delay;
+        if (PTPAvailable)
+      {
+        t.header.stamp = PTPTime;
+      } else {
+        t.header.stamp = now() - frame_delay;
+      }
       t.header.frame_id = rb_name;
       t.pose.position.x = data->RigidBodies[i].x;
       t.pose.position.y = data->RigidBodies[i].y;
